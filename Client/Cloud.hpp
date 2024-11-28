@@ -13,15 +13,59 @@ namespace Cloud
 	private:
 		std::string _back_dir;
 		DataManager* data;
-
+		
+		std::pair<std::string, std::string> cookie;
 	public:
 
 		Backup(const std::string& back_dir, const std::string& back_file) :
 			_back_dir(back_dir) {
 			data = new DataManager(back_file);
+			setcookie(cookie);
+
+			verify(cookie);
 		}
 
-		bool Upload(const std::string filename)
+		bool verify(const std::pair<std::string, std::string>& cookie)
+		{
+			// 创建 HTTP 客户端
+			httplib::Client client(server_ip, server_port);
+
+			// 登录表单数据
+			std::string username = cookie.first; // 替换为实际用户名
+			std::string password = cookie.second;  // 替换为实际密码
+
+			std::string form_data = "username=" + username + "&password=" + password;
+
+			auto res = client.Post("/Login", form_data, "application/x-www-form-urlencoded");
+
+			if (res && res->status == 200) {
+				std::cout << "Login succeeded: " << res->body << std::endl;
+				return true;
+			}
+			else {
+				std::cout << "Login failed" << std::endl;
+				if (res) {
+					std::cout << "HTTP Status: " << res->status << std::endl;
+				}
+				else {
+					std::cout << "Connection failed" << std::endl;
+				}
+
+				return false;
+			}
+
+			return true;
+		}
+
+		bool setcookie(std::pair<std::string, std::string>& cookie)
+		{
+			std::cin >> cookie.first;
+			std::cin >> cookie.second;
+
+			return true;
+		}
+
+		bool Upload(const std::string filename, const std::pair<std::string, std::string>& cookie)
 		{
 			FileUtil fu(filename);
 			std::string body;
@@ -29,6 +73,7 @@ namespace Cloud
 
 			//建立网络链接，上传文件
 			httplib::Client client(server_ip, server_port);
+			// 设置 Cookie
 			httplib::MultipartFormData item;
 			item.content = body;
 			item.filename = fu.FileName();
@@ -37,7 +82,11 @@ namespace Cloud
 			httplib::MultipartFormDataItems items;
 			items.push_back(item);
 
-			auto res = client.Post("/Upload", items);
+			httplib::Headers headers = {
+				{"Cookie", "username=" + cookie.first + "; Password=" + cookie.second}
+			};
+
+			auto res = client.Post("/Upload", headers, items);
 			if (!res || res->status != 200) {
 				return false;
 			}
@@ -108,7 +157,7 @@ namespace Cloud
 					}
 					// 备份文件信息
 					// 上传文件
-					if (Upload(e) == true)
+					if (Upload(e,cookie) == true)
 					{
 						data->Insert(e, GetFileId(e));
 						std::cout << "file backup success" << e << std::endl;
